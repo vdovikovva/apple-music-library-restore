@@ -1,0 +1,4 @@
+{
+  "developer_token": "<paste the string after 'Bearer ' from the authorization header>",
+  "music_user_token": "<paste the value of the media-user-token cookie>"
+}

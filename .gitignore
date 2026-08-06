@@ -1,0 +1,23 @@
+# NEVER commit these — they grant full access to your Apple Music library
+tokens.json
+
+# Working files: reports contain your entire listening history and Apple ID
+work/
+*.csv
+*_journal.json
+*_checkpoint.json
+*.log
+
+# Apple data export — never commit your own
+Apple Music Activity/
+*.json
+!tokens.example.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# macOS
+.DS_Store
