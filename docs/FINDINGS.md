@@ -1,5 +1,7 @@
 # Measurements and API behaviour
 
+**Русская версия: [FINDINGS.ru.md](FINDINGS.ru.md)**
+
 Everything here was measured on a real migration, **6 August 2026**, Apple Music
 API v1, storefront `RU` → `US`. Source library: 10,532 tracks accumulated
 2012–2026. Sample sizes are stated for every number.
