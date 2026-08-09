@@ -135,7 +135,7 @@ Restore your Apple Music library after changing your Apple ID country, using App
 средство («Apple's own data export»).
 
 Описание на английском, потому что проблема международная. Русскоязычные
-читатели придут из статьи на Хабре, и для них есть `README.ru.md`.
+читатели придут из статьи на Хабре, и для них есть `README.md`.
 
 ---
 
@@ -149,7 +149,7 @@ Restore your Apple Music library after changing your Apple ID country, using App
 2. Перетащите в окно **всё содержимое** папки `apple-music-library-restore`:
    - `01_check.py`, `02_resolve.py`, `03_add_tracks.py`, `04_add_playlists.py`
    - `common.py`, `test_logic.py`
-   - `README.md`, `README.ru.md`, `LICENSE`, `SECURITY.md`
+   - `README.md`, `README.md`, `LICENSE`, `SECURITY.md`
    - `.gitignore`, `tokens.example.json`
    - папку `docs` целиком
 3. В поле Commit changes напишите `Initial commit`
@@ -369,7 +369,7 @@ protection**: он проверяет то, что вы отправляете, 
 [ ] репозиторий публичный, имя apple-music-library-restore
 [ ] описание заполнено (то самое, на английском)
 [ ] файлы загружены, включая SECURITY.md и test_logic.py
-[ ] README виден на главной, ссылка на README.ru.md работает
+[ ] README виден на главной, ссылка на README.md работает
 
 Оформление
 [ ] 7 топиков проставлены
