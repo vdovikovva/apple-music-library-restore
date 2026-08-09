@@ -1,5 +1,7 @@
 # Restore your Apple Music library after changing country
 
+![Restore your Apple Music library after changing country](docs/assets/preview.png)
+
 **Русская версия: [README.ru.md](README.ru.md)**
 
 You changed your Apple ID's country — or moved to a new Apple ID — and your

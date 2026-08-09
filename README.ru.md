@@ -1,5 +1,7 @@
 # Восстановление медиатеки Apple Music после смены страны аккаунта
 
+![Restore your Apple Music library after changing country](docs/assets/preview.png)
+
 **English version: [README.md](README.md)**
 
 Вы сменили страну Apple ID — или перешли на новый аккаунт — и медиатека Apple
