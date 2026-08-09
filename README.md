@@ -78,6 +78,11 @@ Be realistic before you start:
 
 ---
 
+## Contact
+
+Questions, bug reports, or measurements from your own library: open an issue,
+or write to **vdovikov@me.com**.
+
 ## Requirements
 
 - Python 3.9+ (no third-party packages — standard library only)

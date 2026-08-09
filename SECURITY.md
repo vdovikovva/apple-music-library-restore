@@ -1,5 +1,7 @@
 # Security
 
+**Русская версия: [SECURITY.ru.md](SECURITY.ru.md)**
+
 ## What this tool has access to
 
 It runs with two tokens you supply in `tokens.json`:
@@ -53,9 +55,9 @@ token came from. Then sign back in and fetch a new one.
 Open an issue for anything non-sensitive.
 
 For something that could put other users' accounts at risk — a token leaking
-into logs, an unintended write path — please report it privately via
-[GitHub Security Advisories](../../security/advisories/new) rather than a
-public issue.
+into logs, an unintended write path — please report it privately — via
+[GitHub Security Advisories](../../security/advisories/new) or by email to
+**vdovikov@me.com** — rather than a public issue.
 
 ## On the terms-of-service question
 
