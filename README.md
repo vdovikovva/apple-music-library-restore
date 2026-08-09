@@ -1,113 +1,114 @@
-# Восстановление медиатеки Apple Music после смены страны аккаунта
+# Restore your Apple Music library after changing country
 
 ![Restore your Apple Music library after changing country](docs/assets/preview.png)
 
-**English version: [README.en.md](README.en.md)**
+**Русская версия: [README.ru.md](README.ru.md)**
 
-Вы сменили страну Apple ID — или перешли на новый аккаунт — и медиатека Apple
-Music оказалась пустой. Плейлисты исчезли, альбомы исчезли, тысячи треков
-исчезли. Apple не переносит медиатеку между витринами, и поддержка её не
-вернёт.
+You changed your Apple ID's country — or moved to a new Apple ID — and your
+Apple Music library is empty. Playlists gone, albums gone, thousands of songs
+gone. Apple does not migrate libraries across storefronts, and support cannot
+bring it back.
 
-Этот инструмент восстанавливает её из выгрузки данных, которую Apple выдаёт
-бесплатно.
+This restores it from the data export Apple gives you for free.
 
-> Проверено 6 августа 2026 на Apple Music API v1: медиатека из 10 532 треков
-> перенесена с витрины `RU` на `US`. Восстановлено **83,6%** треков, у которых
-> был каталожный ID, и все плейлисты, состав которых сохранился в выгрузке.
+> Verified 6 August 2026 against Apple Music API v1, migrating a 10,532-track
+> library from the `RU` storefront to `US`. **83.6%** of tracks that had a
+> catalog ID were recovered, along with all playlists that still had content.
 
 ---
 
-## Почему очевидные способы не работают
+## Why the obvious approaches fail
 
-**«Импортировать JSON в приложение Музыка».** Команда `add` в Музыке
-принимает файлы с диска. Искать треки в стриминге по названию она не умеет.
-В AppleScript вообще нет команды, добавляющей каталожный трек в медиатеку.
+**"Just import the JSON into the Music app."** The Music app's `add` command
+takes files from disk. It cannot look up streaming tracks by title. AppleScript
+has no command to add a catalog track to your library at all.
 
-**«Воспользоваться сервисом переноса плейлистов».** Такие сервисы сопоставляют
-треки по тексту «артист — название». Для плейлистов сойдёт, но на ремиксах,
-концертных записях, радиоверсиях и кириллице они ошибаются. И они переносят
-плейлисты, а не медиатеку.
+**"Use a playlist transfer service."** Those match on `artist — title` text.
+That works for playlists and fails on remixes, live versions, radio edits and
+non-Latin titles. They also do not restore a library — only playlists.
 
-**«В выгрузке же есть ID, просто добавьте их».** Есть — и в этом главная
-ловушка: **каталожные ID Apple Music привязаны к витрине.** У одного и того же
-трека в каждой стране свой числовой идентификатор. Примерно треть ID из вашей
-выгрузки в другой витрине не значит ничего.
+**"The IDs are right there in the export, just add them."** They are, and this
+is the real trap: **Apple Music catalog IDs are storefront-specific.** The same
+song has a different numeric ID in every country. Roughly a third of the IDs in
+your export mean nothing in a different storefront.
 
-## Что делает этот инструмент
+## What this does instead
 
-В выгрузке лежат настоящие каталожные ID, а не только текст. Это позволяет
-сопоставлять точно — принципиально надёжнее любого текстового поиска.
-Остаётся перевести ID между витринами, и делается это каскадом из трёх
-методов, от самого надёжного к самому широкому:
+Your export contains real catalog IDs, not just text. That allows exact
+matching — a different class of accuracy than any text-based tool. The
+remaining problem is translating IDs between storefronts, which is done with a
+three-step cascade, most reliable first:
 
-| Шаг | Как работает | Покрытие | Точность |
+| Step | How it works | Reach | Accuracy |
 |---|---|---:|---:|
-| **1. ISRC** | каталог-источник → ISRC → `filter[isrc]` в целевом | 24% | **100%** |
-| **2. Прямой ID** | часть ID совпадает между витринами | 63–66% | 96% |
-| **3. Конвертер** | `filter[equivalents]`, штатный конвертер Apple | 76% | 87% |
+| **1. ISRC** | source catalog → ISRC → `filter[isrc]` in target | 24% | **100%** |
+| **2. Direct ID** | some IDs happen to be identical across storefronts | 63–66% | 96% |
+| **3. Equivalents** | `filter[equivalents]`, Apple's own converter | 76% | 87% |
 
-Каждое совпадение затем сверяется с исходной длительностью трека. Это важнее,
-чем кажется: конвертер спокойно возвращает семиминутный extended mix там, где
-запрашивали трёхминутный radio edit. Ловится это только по длительности.
+Every match is then verified against the original track duration. This matters
+more than it sounds: the equivalents converter will happily return a
+7-minute extended mix when you asked for a 3-minute radio edit. Duration is
+what catches it.
 
-Всё, что проверку не прошло, отправляется в `manual_review.csv` — решать вам,
-а не эвристике.
+Anything that does not pass goes to `manual_review.csv` for you to decide,
+instead of being silently added wrong.
 
-Полные измерения и подводные камни — в [docs/FINDINGS.md](docs/FINDINGS.md).
+See [docs/FINDINGS.md](docs/FINDINGS.md) for the full measurements, including
+the quirks that cost the most time to discover.
 
-## Что возвращается
+## What you get back
 
-- **Треки** — всё, что есть в каталоге новой страны
-- **Плейлисты** — с сохранением исходного порядка треков
-- **Альбомы и артисты** — собираются сами из добавленных треков
-- **Кураторские плейлисты Apple**, на которые вы были подписаны
+- **Tracks** — everything still present in your new storefront
+- **Playlists** — with original track order preserved
+- **Albums and artists** — these rebuild themselves from the tracks, no extra work
+- **Apple's curated playlists** you were subscribed to
 
-## Что потеряно навсегда
+## What is gone for good
 
-Стоит понимать заранее:
+Be realistic before you start:
 
-- **Личные загрузки (iTunes Match).** После окончания подписки Apple удаляет
-  облачные копии. В медиатеке остаются только названия — серые записи, которые
-  не играют. Вернуть их можно лишь из локальной резервной копии.
-- **Покупки** остаются привязаны к старому Apple ID. Их можно перекачать там,
-  но перенести на новый аккаунт нельзя.
-- **Счётчики прослушиваний, даты добавления, история оценок.** API не
-  позволяет их записать.
-- **Треки, выпавшие из каталога целевой страны.**
-- **Смарт-плейлисты и Genius-миксы.** Их правила в выгрузку не попадают.
+- **Personal uploads (iTunes Match).** When the subscription lapses, Apple
+  deletes the cloud copies. The library keeps the titles, so they appear as
+  greyed-out entries that will not play. Only a local backup can bring these back.
+- **Purchases** stay tied to the old Apple ID. You can re-download them there,
+  but they do not transfer.
+- **Play counts, date added, ratings history.** The API cannot write them.
+- **Tracks pulled from your target storefront's catalog.** Nothing to point at.
+- **Smart playlists and Genius mixes.** Rules are not in the export.
 
 ---
 
-## Связь
+## Contact
 
-Вопросы, баг-репорты или замеры с вашей библиотеки — открывайте issue или
-пишите на **vdovikov@me.com**.
+Questions, bug reports, or measurements from your own library: open an issue,
+or write to **vdovikov@me.com**.
 
-## Требования
+## Requirements
 
-- Python 3.9+ (сторонних пакетов не нужно, только стандартная библиотека)
-- **Активная подписка Apple Music на новом аккаунте.** Без неё добавлять
-  каталожные треки нельзя в принципе.
-- Выгрузка ваших данных Apple
+- Python 3.9+ (no third-party packages — standard library only)
+- **An active Apple Music subscription on the new account.** Without it, adding
+  catalog tracks is impossible.
+- Your Apple data export
 
-## Получить выгрузку
+## Get your data export
 
-1. Зайдите на [privacy.apple.com](https://privacy.apple.com) → *Запросить копию данных*
-2. Выберите **Сведения о мультимедийных сервисах Apple**
-3. Ждите — Apple готовит до 7 дней
-4. Распакуйте и найдите папку `Apple_Media_Services/Apple Music Activity`
+1. Go to [privacy.apple.com](https://privacy.apple.com) → *Request a copy of your data*
+2. Select **Apple Media Services information**
+3. Wait — Apple takes up to 7 days
+4. Unzip and find the folder `Apple_Media_Services/Apple Music Activity`
 
-## Получить токены
+## Get your tokens
 
-Нужны два токена. Откройте [music.apple.com](https://music.apple.com) в Chrome
-или Safari под **новым** аккаунтом.
+Two tokens are needed. Open [music.apple.com](https://music.apple.com) in
+Chrome or Safari, signed in to the **new** account.
 
-**Вариант А — официальный (Apple Developer Program, 99 $/год).** Сгенерируйте
-developer token по [документации Apple](https://developer.apple.com/documentation/applemusicapi/generating-developer-tokens),
-затем получите Music User Token через MusicKit JS. Этот путь предусмотрен Apple.
+**Option A — official (Apple Developer Program, $99/year).** Generate a
+developer token as described in
+[Apple's documentation](https://developer.apple.com/documentation/applemusicapi/generating-developer-tokens),
+then obtain a Music User Token via MusicKit JS. This is the route Apple
+sanctions.
 
-**Вариант Б — токен веб-плеера.** Откройте консоль браузера и выполните:
+**Option B — the web player's own token.** Open the browser console and run:
 
 ```js
 copy(JSON.stringify({
@@ -116,66 +117,65 @@ copy(JSON.stringify({
 }, null, 2))
 ```
 
-Готовый JSON окажется в буфере обмена. Если консоль пишет, что `MusicKit` не
-определён, включите любой трек на секунду и повторите.
+That copies a ready JSON to your clipboard. If `MusicKit` is undefined, play
+any track for a second and retry.
 
-> **О варианте Б.** Он использует тот же токен, на котором работает веб-плеер
-> Apple. Вы обращаетесь к собственной медиатеке собственным ключом, ничего не
-> обходя и не затрагивая чужие данные, — но условиями Apple такое применение
-> не предусмотрено. Решение за вами. Токены живут месяцами; никогда не
-> публикуйте `tokens.json` — он даёт полный доступ к вашей медиатеке.
+> **Note on Option B.** It reuses the token Apple's own web player runs on.
+> You are reaching your own library with your own key, and nothing here
+> circumvents payment or accesses anyone else's data — but it is not a use
+> Apple's terms provide for. Use it at your own discretion. Tokens last months;
+> never commit `tokens.json` or share it, as it grants full access to your library.
 
-Сохраните результат:
+Save the result:
 
 ```bash
 cp tokens.example.json tokens.json
-# вставьте два значения в tokens.json
+# paste your two values into tokens.json
 ```
 
 ---
 
-## Использование
+## Usage
 
-Шаги выполняются по порядку. Всё до третьего шага — только чтение.
+Run the steps in order. Everything before step 3 is read-only.
 
 ```bash
-EXPORT="/путь/к/Apple_Media_Services/Apple Music Activity"
+EXPORT="/path/to/Apple_Media_Services/Apple Music Activity"
 
-# 1. Проверка токенов и оценка восстановимого (~2 мин, только чтение)
+# 1. Check tokens and estimate what is recoverable (~2 min, read-only)
 python3 01_check.py --export "$EXPORT" --from ru --to us
 
-# 2. Резолв всей медиатеки, отчёты в CSV (~30-60 мин, только чтение)
+# 2. Resolve the whole library, produce CSV reports (~30-60 min, read-only)
 python3 02_resolve.py --export "$EXPORT" --from ru --to us
 
-# --- откройте work/manual_review.csv и просмотрите спорные совпадения ---
+# --- open work/manual_review.csv and look at the questionable matches ---
 
-# 3. Добавление треков — сначала превью, затем запись
+# 3. Add the reliable matches — preview first, then apply
 python3 03_add_tracks.py --export "$EXPORT"
 python3 03_add_tracks.py --export "$EXPORT" --apply
 
-# 4. Плейлисты — так же
+# 4. Rebuild playlists — same pattern
 python3 04_add_playlists.py --export "$EXPORT"
 python3 04_add_playlists.py --export "$EXPORT" --apply
 ```
 
-Оба пишущих шага по умолчанию показывают превью и ничего не делают, пока не
-передан `--apply`.
+Both writing steps preview by default and do nothing until you pass `--apply`.
 
-В `--from` укажите страну, из которой переезжаете, в `--to` — новую.
+Set `--from` to the country your library came from and `--to` to your new one.
 
-### Если что-то пошло не так
+### If something goes wrong
 
 ```bash
 python3 03_add_tracks.py --undo
 ```
 
-Каждый добавленный трек записан в журнал, поэтому откат удалит ровно то, что
-добавил инструмент, и ничего больше. Прерванный запуск продолжается с места
-остановки — просто запустите ту же команду снова.
+Every added track is journalled, so this removes exactly what the tool added
+and nothing else. Interrupted runs resume from where they stopped — just run
+the same command again.
 
-### Добавить одобренные вручную
+### Adding tracks you approved manually
 
-Отредактируйте `work/manual_review.csv`, удалите ненужные строки, затем:
+Edit `work/manual_review.csv`, delete the rows you do not want, then:
 
 ```bash
 python3 03_add_tracks.py --include-manual work/manual_review.csv --apply
@@ -183,41 +183,53 @@ python3 03_add_tracks.py --include-manual work/manual_review.csv --apply
 
 ---
 
-## Подводные камни
+## Notes and gotchas
 
-- **Запись в медиатеку работает только на `amp-api.music.apple.com`.** На
-  `api.music.apple.com` метод `DELETE` возвращает 401, притом что `GET` и
-  `POST` проходят. На это ушло несколько часов.
-- **HTTP 202 не означает успех.** Apple принимает запрос и может молча не
-  добавить трек: лицензия релиза запрещает добавление в медиатеку, хотя
-  слушать его можно. В тестах так себя вели 3,5% треков. Обойти нельзя.
-- **`filter[equivalents]` принимает один ID за запрос.** ISRC-путь батчится по
-  100 — поэтому в каскаде он идёт первым.
-- **Серые треки без `playParams`** — это мёртвые записи, а не восстановленная
-  музыка. При дедупликации их нельзя считать за «уже есть».
-- Лимит Apple — около 20 запросов в секунду, инструмент держит около 3.
+- **Library writes only work on `amp-api.music.apple.com`.** On
+  `api.music.apple.com`, `DELETE` returns 401 while `GET` and `POST` succeed.
+  Hours were lost to this.
+- **HTTP 202 does not mean success.** Apple accepts the request and may
+  silently not add the track — its licence forbids library adds even though it
+  streams fine. About 3.5% of adds in testing. There is no workaround.
+- **`filter[equivalents]` takes one ID per request.** The ISRC route batches
+  up to 100, which is why the cascade puts it first.
+- **Greyed-out tracks with no `playParams`** are dead entries, not restored
+  music. Do not count them as already-present when deduplicating.
+- Apple's rate limit is around 20 requests/second; this tool stays near 3.
 
-## Тесты
+## Related work
+
+[thatmanmatt/Add-to-Apple-Music](https://github.com/thatmanmatt/Add-to-Apple-Music)
+solves the same problem — a library lost when moving country — by parsing the
+`Library.xml` you export from the Music app and re-adding albums.
+
+The difference is the input. That approach needs a Mac with the old library
+still loaded, and matches at album level. This one works from Apple's privacy
+data export, which you can request after everything is already gone, and
+matches individual tracks by catalog ID with a duration check. If you still
+have a working Music.app library, that tool is the simpler path.
+
+## Tests
 
 ```bash
 python3 test_logic.py
 ```
 
-Покрывают логику принятия решений — ту, что при ошибке тихо портит перенос:
-проверку длительности, порядок треков в плейлистах, одноимённые плейлисты.
-Ни сети, ни токенов, ни аккаунта не требуется.
+Covers the decision logic that silently corrupts a migration when wrong — the
+duration check, playlist ordering, and same-named playlists. No network, no
+tokens, no account required.
 
-## Планы
+## Roadmap
 
-Пока не реализовано, помощь приветствуется:
+Not implemented yet — contributions welcome:
 
-- Восстановление лайков (`PUT /v1/me/ratings/songs/{id}`)
-- Поиск по названию для треков без каталожного ID
-- Перекачивание покупок со старого Apple ID
+- Restoring loved/favourited tracks (`PUT /v1/me/ratings/songs/{id}`)
+- Text-search fallback for tracks with no catalog ID
+- Re-downloading purchases from the old Apple ID
 
-## Отказ от ответственности
+## Disclaimer
 
-Проект не связан с Apple и не одобрен ею. Распространяется как есть по
-лицензии MIT. Инструмент работает только с вашей собственной медиатекой, и
-третий шаг — первый, который вообще что-то записывает. Перед запуском на
-дорогой вам медиатеке прочитайте [docs/FINDINGS.md](docs/FINDINGS.md).
+Not affiliated with or endorsed by Apple. Provided as-is under the MIT licence.
+It only ever touches your own library, and step 3 is the first step that writes
+anything. Read [docs/FINDINGS.md](docs/FINDINGS.md) before running it on a
+library you care about.
