@@ -21,3 +21,8 @@ venv/
 
 # macOS
 .DS_Store
+
+# рабочие заметки под публикацию, не для репозитория
+docs/habr-meta.txt
+docs/habr-tags.txt
+docs/habr-ready.md
