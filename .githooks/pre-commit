@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+#
+# Не даёт закоммитить то, что в git попадать не должно: выгрузки данных,
+# персональные данные, ключи, дампы и просто крупные бинарники.
+#
+# Проверяет ТОЛЬКО то, что реально попадёт в коммит (индекс), а не рабочую
+# папку: файл может лежать рядом сколько угодно, лишь бы не был добавлен.
+#
+# Два уровня:
+#   ✗ БЛОКИРУЕТ — коммит не пройдёт (имя файла, размер, ключи, токены);
+#   ⚠ ПРЕДУПРЕЖДАЕТ — коммит пройдёт, но стоит глазами проверить
+#     (маркеры выгрузки Apple: они бывают и в описании, и в самих данных).
+#
+# Осознанный обход: git commit --no-verify
+#
+# Установка после клонирования (хук лежит в репозитории, но git сам его
+# не включает — это защита от чужого кода в свежем клоне):
+#   git config core.hooksPath .githooks
+
+set -uo pipefail
+
+fail=0
+warn=0
+say() { printf '%s\n' "$*" >&2; }
+
+# Файлы-исключения: примеры конфигов и заведомо публичные артефакты.
+ALLOW='^(tokens\.example\.json|deploy\.conf\.example|app/certs/russian_trusted_ca_bundle\.pem|\.githooks/pre-commit)$'
+
+# Имена и расширения, которых в репозитории быть не должно.
+#   csv/tsv/json-выгрузки — данные, а не код
+#   pem/key/p12/id_rsa    — ключи
+#   sqlite/db/sql.gz      — дампы БД
+#   env/tokens.json/deploy.conf — секреты
+DENY='(^|/)\.DS_Store$|(^|/)\.env(\.|$)|(^|/)tokens\.json$|(^|/)deploy\.conf$|(^|/)id_(rsa|dsa|ecdsa|ed25519)$|\.(csv|tsv|zip|sqlite|sqlite3|db|pem|key|p12|pfx|mobileprovision)$|\.sql\.gz$|(^|/)Apple Music .*\.(json|csv)$'
+
+# 5 МБ: всё, что крупнее, git хранит целиком в каждой ревизии.
+MAXBYTES=$((5 * 1024 * 1024))
+
+while IFS= read -r -d '' f; do
+	[[ "$f" =~ $ALLOW ]] && continue
+
+	if [[ "$f" =~ $DENY ]]; then
+		say "✗ $f"
+		say "    данные, секрет или мусор — в git не место"
+		fail=1
+		continue
+	fi
+
+	size=$(git cat-file -s ":$f" 2>/dev/null || printf '0')
+	if [ "$size" -gt "$MAXBYTES" ]; then
+		say "✗ $f"
+		say "    $((size / 1024 / 1024)) МБ — слишком крупно, git хранит такое навсегда"
+		fail=1
+		continue
+	fi
+
+	# Дальше — содержимое. Бинарники пропускаем: искать в них строки бессмысленно.
+	if ! git show ":$f" 2>/dev/null | LC_ALL=C grep -qI . 2>/dev/null; then
+		continue
+	fi
+	content=$(git show ":$f" 2>/dev/null)
+
+	# Ключи и токены — блокируем без разговоров.
+	secrets=$(printf '%s' "$content" | LC_ALL=C grep -nE \
+		-e '-----BEGIN [A-Z ]*PRIVATE KEY-----' \
+		-e 'gh[pousr]_[A-Za-z0-9]{30,}' \
+		-e 'sk-[A-Za-z0-9_-]{30,}' \
+		-e 'AKIA[0-9A-Z]{16}' \
+		| head -3 | cut -c1-100)
+	if [ -n "$secrets" ]; then
+		say "✗ $f"
+		say "    похоже на приватный ключ или токен:"
+		printf '%s\n' "$secrets" | while IFS= read -r l; do say "      $l"; done
+		fail=1
+		continue
+	fi
+
+	# Маркеры выгрузки Apple. Они же встречаются в документации («не
+	# публикуйте свой Apple ID number»), поэтому не блокируем, а показываем.
+	markers=$(printf '%s' "$content" | LC_ALL=C grep -niE \
+		-e 'Apple ID Number' \
+		-e 'House ID' \
+		-e 'IP (Latitude|Longitude|City)' \
+		-e 'Subscription User' \
+		-e '@privaterelay\.appleid\.com' \
+		| head -3 | cut -c1-100)
+	if [ -n "$markers" ]; then
+		say "⚠ $f"
+		say "    маркеры персональных данных — убедись, что это описание, а не сами данные:"
+		printf '%s\n' "$markers" | while IFS= read -r l; do say "      $l"; done
+		warn=1
+	fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if [ "$fail" -ne 0 ]; then
+	say ""
+	say "Коммит остановлен. Убери файл из индекса:  git restore --staged <файл>"
+	say "и добавь его в .gitignore, чтобы больше не всплывал."
+	say "Если это ложная тревога:  git commit --no-verify"
+	exit 1
+fi
+
+if [ "$warn" -ne 0 ]; then
+	say ""
+	say "Предупреждения выше не блокируют коммит."
+fi
+
+exit 0
