@@ -16,8 +16,8 @@ import json
 import os
 import time
 
-from common import (ACCEPTED, ApiError, Client, base_parser, live_library_ids,
-                    load_tokens, require_export, work_dir)
+from common import (ACCEPTED, ApiError, Client, base_parser, keep_awake,
+                    live_library_ids, load_tokens, require_export, work_dir)
 
 BATCH = 25
 
@@ -77,7 +77,12 @@ def main():
     journal = load_journal(jpath)
 
     if args.undo:
-        undo(client, journal, jpath)
+        keep_awake()
+        try:
+            undo(client, journal, jpath)
+        except ApiError as e:
+            raise SystemExit(f"  Could not read your library ({e}). Re-run --undo "
+                             "once the network is back.")
         return
 
     src = os.path.join(work, "tracks.csv")
@@ -101,7 +106,11 @@ def main():
     print("=" * 66)
     print(f"  Unique tracks resolved:  {len(queue)}")
 
-    existing, dead = live_library_ids(client)
+    try:
+        existing, dead = live_library_ids(client)
+    except ApiError as e:
+        raise SystemExit(f"  Could not read your library ({e}). Nothing was "
+                         "written — re-run once the network is back.")
     print(f"  Already in library:      {len(existing)} live ({dead} dead entries ignored)")
 
     done = set(journal["added"])
@@ -120,11 +129,14 @@ def main():
                   f"   [{r['Method']}, {r['Verdict']}]")
         if len(todo) > 15:
             print(f"    … and {len(todo) - 15} more")
-        est = len(todo) / BATCH * (args.pause + 0.3) / 60
-        print(f"\n  Preview only — nothing was written. Estimated run time: {est:.0f} min.")
+        # No time estimate here: request latency is Apple's and varies. The
+        # run itself prints an ETA from the pace it actually gets.
+        batches = -(-len(todo) // BATCH)
+        print(f"\n  Preview only — nothing was written. {batches} batches of {BATCH}.")
         print("  Re-run with --apply to add them for real.")
         return
 
+    keep_awake()
     t0, ok, fail = time.time(), 0, 0
     for i in range(0, len(todo), BATCH):
         chunk = todo[i:i + BATCH]
@@ -138,13 +150,23 @@ def main():
             print(f"    ! batch {i // BATCH}: {e}")
         if (i // BATCH) % 20 == 0:
             save_journal(journal, jpath)
-            print(f"    {min(i + BATCH, len(todo))}/{len(todo)}  ok={ok} failed={fail}")
+            done_n = min(i + BATCH, len(todo))
+            eta = (time.time() - t0) / done_n * (len(todo) - done_n) / 60
+            print(f"    {done_n}/{len(todo)}  ok={ok} failed={fail}  ~{eta:.0f} min left")
     save_journal(journal, jpath)
 
     print(f"\n  Sent: {ok}   Failed: {fail}   ({(time.time() - t0) / 60:.1f} min)")
     print("\n  Waiting 30s, then verifying…")
     time.sleep(30)
-    live, dead = live_library_ids(client)
+    try:
+        live, dead = live_library_ids(client)
+    except ApiError as e:
+        # Without the library there is nothing to compare against, and an
+        # empty set here would read as 'Apple refused every single track'.
+        print(f"  Could not read your library to verify ({e}).")
+        print("  The journal is saved. Run the same command without --apply")
+        print("  once the network is back: it shows what is still missing.")
+        return
     confirmed = sum(1 for c in journal["added"] if c in live)
     print(f"  Live tracks in library now: {len(live)}")
     print(f"  Confirmed from journal:     {confirmed}/{len(journal['added'])}")

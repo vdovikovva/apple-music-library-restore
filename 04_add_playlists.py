@@ -17,7 +17,7 @@ import json
 import os
 
 from common import (ACCEPTED, ApiError, Client, base_parser, export_file,
-                    load_tokens, require_export, work_dir)
+                    keep_awake, load_tokens, require_export, work_dir)
 
 CHUNK = 100          # tracks per request
 
@@ -140,6 +140,8 @@ def main():
     if not args.apply:
         print("\n  Preview only. Re-run with --apply to create them.")
         return
+
+    keep_awake()
 
     print("\n" + "-" * 66)
     ok = fail = 0

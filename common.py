@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import ssl
+import subprocess
 import sys
 import time
 import urllib.error
@@ -85,8 +86,15 @@ class Client:
         except urllib.error.HTTPError as e:
             raise ApiError(e.code, e.read().decode()) from None
 
-    def get(self, path, params=None, attempts=5):
-        """GET that tolerates 404 (nothing found), 429 and network drops."""
+    def get(self, path, params=None, attempts=5, strict=False):
+        """
+        GET that tolerates 404 (nothing found), 429 and network drops.
+
+        When the network stays down past all retries, the default is to return
+        an empty page, same as a 404. With strict=True it raises instead: a
+        caller that pages through the whole library must not mistake 'offline'
+        for 'the library is empty'.
+        """
         for i in range(attempts):
             try:
                 time.sleep(self.pause)
@@ -104,6 +112,8 @@ class Client:
                 wait = 3 * (i + 1)
                 self._say(f"    network ({type(e).__name__}) — retry in {wait}s")
                 time.sleep(wait)
+        if strict:
+            raise ApiError(0, "network down, giving up after retries")
         return {"data": []}
 
     def mutate(self, method, path, body=None, attempts=3):
@@ -136,7 +146,8 @@ class Client:
         out, offset = [], 0
         for _ in range(limit_pages):
             page = self.get("/v1/me/library/songs",
-                            {"limit": 100, "offset": offset}).get("data", [])
+                            {"limit": 100, "offset": offset},
+                            strict=True).get("data", [])
             if not page:
                 break
             out += page
@@ -164,6 +175,23 @@ class Client:
             b, ib = self.catalog_batch(storefront, kind, param, values[mid:])
             a.update(b)
             return a, ia + ib
+
+
+def keep_awake():
+    """
+    Hold off idle sleep for as long as this process lives. macOS only.
+
+    A long write left running on a laptop otherwise goes to sleep with it:
+    the run crawls forward only during the short maintenance wakes, and the
+    network drops out under it. caffeinate -w exits by itself with the process.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
 
 
 # ─────────────────────────── tokens & CLI ────────────────────────────
