@@ -181,6 +181,54 @@ Edit `work/manual_review.csv`, delete the rows you do not want, then:
 python3 03_add_tracks.py --include-manual work/manual_review.csv --apply
 ```
 
+### When the old Apple ID is gone
+
+Blocked, deleted, or simply not yours any more: then there is no token for it
+and no data export either. What is left is the Music app on a Mac that was
+signed in to it — it still holds the library metadata, and AppleScript can
+read it.
+
+That snapshot has **no catalog IDs** — the Music app never exposes them — so
+the ID cascade above cannot run. Tracks are matched by text and duration
+instead, which is less exact and much slower: Apple's `/search` endpoint gives
+out after a few hundred requests and then answers 429 for a long while.
+Step 2 below backs off on its own and resumes from a checkpoint.
+
+Take the snapshot **before** the Music app signs out of the old account,
+while the library is still there.
+
+```bash
+# 0. Snapshot the Mac's Music library into export-shaped JSON (read-only)
+python3 00_dump_local.py --out work/local-export
+
+# 1. Diff it against the new account's library -> work/delta.json (read-only)
+python3 01_diff_ru.py --snapshot work/local-export
+
+# 2. Search the target catalog for what is missing -> work/tracks.csv
+#    (read-only, can take hours; re-run the same command to resume)
+python3 02_find_ru.py --delta work/delta.json --store ru
+
+# 3. Add the found tracks — preview first, then apply
+python3 03_add_tracks.py --export work/local-export
+python3 03_add_tracks.py --export work/local-export --apply
+
+# 4. Rebuild playlists — same pattern; --only restores a single one
+python3 04_add_playlists.py --export work/local-export
+python3 04_add_playlists.py --export work/local-export --apply
+```
+
+`--store` in step 2 is the country of the new account. Matching is strict by
+default (title ≥ 0.90, artist ≥ 0.80, duration within 5 s); `--loose` accepts
+on duration alone and is worth a manual look before step 3.
+
+**A playlist is on the Mac but never reaches the phone?** Look inside it for
+tracks of kind "Internet audio stream" with no address. They are what is left
+of tracks that sat in the playlist without being in the library, and they
+appear to keep the whole playlist out of the cloud. Do not repair the Mac
+copy: recreate the playlist with step 4 (`--only "Name"`), wait until it
+arrives on the Mac as a second playlist, then delete the old one. Details in
+[FINDINGS](docs/FINDINGS.md#playlists-that-stay-on-the-mac-and-never-reach-the-phone).
+
 ---
 
 ## Notes and gotchas
@@ -224,7 +272,6 @@ tokens, no account required.
 Not implemented yet — contributions welcome:
 
 - Restoring loved/favourited tracks (`PUT /v1/me/ratings/songs/{id}`)
-- Text-search fallback for tracks with no catalog ID
 - Re-downloading purchases from the old Apple ID
 
 ## Disclaimer
