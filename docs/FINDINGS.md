@@ -178,6 +178,40 @@ usually redundant and risks bloating the library with tracks you never had.
 The export does not contain contents for every playlist: 150 of 190 user
 playlists came through with names only.
 
+### Playlists that stay on the Mac and never reach the phone
+
+Seen on the second migration (source account gone, library rebuilt from the
+Music app on a Mac). Four playlists existed on the Mac but not in the cloud
+library, so the iPhone never got them.
+
+- **Placeholder tracks.** Tracks that sat in a playlist without being in the
+  library (`Playlist Only` in the XML export) did not survive the account
+  switch. The Music app replaced each one with an empty `URL track`
+  (kind "Internet audio stream", no address, `cloud status = unknown`).
+  Two playlists had them: 18 of 98 and 33 of 86. Both were missing from the
+  cloud; every editable playlist without placeholders, created in the same
+  second, uploaded fine. That is a correlation on 2 of 2, not something Apple
+  documents: **a single placeholder appears to keep the whole playlist
+  local**.
+- The placeholders were real catalog tracks. All 18 of the first playlist and
+  23 of 33 of the second were found in the target catalog by artist + title +
+  duration. The ten misses were Christmas jazz (Gregory Porter, Samara Joy,
+  Oscar Peterson and others).
+- The fix is not to repair the Mac copy but to create the playlist through the
+  API with catalog IDs, let the cloud push it to both devices, then delete
+  the old copy on the Mac. Deleting the old copy is safe only once the new one
+  has arrived on the Mac as a separate playlist with a different persistent
+  ID; otherwise you may be deleting the cloud playlist itself.
+- **Catalog IDs from a library snapshot go stale.** Two of 98 IDs taken from
+  `matched.json` (snapshot 10 Sep, used 26 Sep) no longer resolved in the
+  catalog. The API answered 202 and silently dropped them. The same tracks
+  were still in the library and went into the playlist by their library ID
+  (`type: library-songs`, `i.…`), appended at the end.
+- Two Apple curated playlists (`canEdit: false`) that had been in the cloud
+  library disappeared from it while staying on the Mac. Cause unknown.
+  Re-adding them by `pl.…` id restored them with the **same** library ids
+  (`p.…`) they had before.
+
 ## 9. Final tally for this migration
 
 | | Count | Share |
