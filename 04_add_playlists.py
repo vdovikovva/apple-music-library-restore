@@ -34,6 +34,12 @@ def build_maps(args, work):
                 src_of[t["Track Identifier"]] = str(t[field])
                 break
 
+    # A snapshot taken from the Music app (00_dump_local.py) has no catalog
+    # IDs at all — the app never exposes them — so the source side of the map
+    # is the library id itself, which is what step 2 wrote into 'Source ID'.
+    if not src_of:
+        src_of = {t["Track Identifier"]: str(t["Track Identifier"]) for t in lt}
+
     path = os.path.join(work, "tracks.csv")
     if not os.path.exists(path):
         raise SystemExit(f"{path} not found — run 02_resolve.py first")
@@ -42,6 +48,17 @@ def build_maps(args, work):
         for r in csv.DictReader(f):
             if r["Verdict"] in ACCEPTED and r["Target ID"]:
                 dst_of[r["Source ID"]] = r["Target ID"]
+
+    # Tracks the new account already had: they never went through step 2, but
+    # a playlist needs their catalog IDs just the same, or it comes out full
+    # of holes where the tracks were never missing in the first place.
+    mpath = os.path.join(work, "matched.json")
+    if os.path.exists(mpath):
+        with open(mpath, encoding="utf-8") as f:
+            for m in json.load(f):
+                cid = (m.get("new") or {}).get("catalog_id")
+                if cid:
+                    dst_of.setdefault(str(m["old"]["Track Identifier"]), str(cid))
     return src_of, dst_of
 
 
@@ -59,6 +76,8 @@ def resolve_items(items, src_of, dst_of):
 def main():
     p = base_parser(__doc__)
     p.add_argument("--apply", action="store_true", help="actually create playlists")
+    p.add_argument("--only", action="append", default=None, metavar="NAME",
+                   help="restore just this playlist (repeatable)")
     args = p.parse_args()
     require_export(args)
 
@@ -85,6 +104,8 @@ def main():
     for pl in raw:
         if pl.get("Container Type") != "Playlist" or not pl.get("Playlist Item Identifiers"):
             continue
+        if args.only and pl.get("Title") not in args.only:
+            continue
         tracks = resolve_items(pl["Playlist Item Identifiers"], src_of, dst_of)
         if not tracks:
             continue
@@ -101,9 +122,10 @@ def main():
             "existing_id": target["id"] if target else None,
         })
 
-    subscribed = [pl.get("Public Playlist Identifier") for pl in raw
-                  if pl.get("Container Type") == "Subscribed Playlist"
-                  and pl.get("Public Playlist Identifier")]
+    subscribed = [] if args.only else [
+        pl.get("Public Playlist Identifier") for pl in raw
+        if pl.get("Container Type") == "Subscribed Playlist"
+        and pl.get("Public Playlist Identifier")]
 
     print("=" * 66)
     print("STEP 4 — PLAYLISTS" + ("" if args.apply else "   (preview)"))

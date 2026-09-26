@@ -4,6 +4,10 @@ Shared helpers: token loading, API client, library parsing.
 No third-party dependencies — standard library only.
 """
 
+import difflib
+import html
+import re
+import unicodedata
 import argparse
 import json
 import os
@@ -264,6 +268,48 @@ def live_library_ids(client):
         if pp.get("catalogId"):
             live.add(str(pp["catalogId"]))
     return live, dead
+
+
+# ─────────────────────────── text matching ──────────────────────────
+
+# Bracketed junk that bootleg uploads carry and the catalog never does, plus
+# the edition suffixes Apple adds to its own titles. Stripped only for the
+# comparison key — the original text is kept for display and for search terms.
+NOISE = re.compile(
+    r"\((?:feat|ft|with|prod)\.?[^)]*\)"
+    r"|\[[^\]]*\]"
+    r"|\b(?:bass ?boosted|sped ?up|slowed|remastered|single|explicit|clean)\b"
+    r"|[-–—]\s*single\s*$",
+    re.I)
+
+
+def norm(text):
+    """
+    Comparison key for a title or an artist.
+
+    Used wherever two storefronts have to be matched on text alone — when the
+    source account is gone, no catalog ID survives and this is all that is
+    left to join on.
+    """
+    if not text:
+        return ""
+    # The API returns HTML entities: 'A &amp; B'. Left as is, the '&' turns
+    # into a bare 'amp' token and the pair stops matching its own snapshot.
+    s = html.unescape(text)
+    s = unicodedata.normalize("NFKD", s).lower()
+    # NFKD leaves the combining diaeresis of 'ё' in place, which then survives
+    # as its own character and splits 'Всё' from 'Все'. Russian catalogs write
+    # it both ways for the same recording.
+    s = s.replace("\u0308", "")
+    s = NOISE.sub(" ", s)
+    # Keep letters and digits of any alphabet, drop everything else. This is
+    # what kills the emoji walls in the bootleg artist names.
+    s = "".join(ch if ch.isalnum() or ch.isspace() else " " for ch in s)
+    return " ".join(s.split())
+
+
+def similar(a, b):
+    return difflib.SequenceMatcher(None, a, b).ratio()
 
 
 def duration_delta(track, attrs):
