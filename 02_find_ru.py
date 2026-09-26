@@ -50,8 +50,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from common import (ACCEPTED, AMP, API, duration_delta, load_tokens, norm,
-                    similar, verdict)
+from common import (ACCEPTED, AMP, API, duration_delta, keep_awake, load_tokens,
+                    norm, similar, verdict)
 
 CHECKPOINT_EVERY = 25
 
@@ -100,6 +100,7 @@ class Search:
     def get(self, path, params, attempts=0):
         """attempts=0 means keep trying: this is meant to run overnight."""
         i = 0
+        offline = 0
         while attempts == 0 or i < attempts:
             i += 1
             time.sleep(self.pause)
@@ -110,6 +111,7 @@ class Search:
                     out = self._fetch(host, path, params)
                     self.calls += 1
                     self.clean += 1
+                    offline = 0
                     if self.clean >= RECOVER_AFTER and self.pause > PAUSE_MIN:
                         self.pause = max(PAUSE_MIN, self.pause * RECOVER_BY)
                         self.clean = 0
@@ -126,9 +128,14 @@ class Search:
                     self.host = (self.host + 1) % len(HOSTS)
                     tried += 1
                 except (urllib.error.URLError, TimeoutError, OSError) as e:
-                    self._say(f"    network ({type(e).__name__}) — retry in 10s")
-                    time.sleep(10)
-                    tried += 1
+                    # Offline is not a 429: it says nothing about Apple's
+                    # window, so it must not slow the pace or trigger the
+                    # half-hour sleep below. Same host again, waiting longer
+                    # each time, for as long as the network stays down.
+                    wait = min(300, 10 * 2 ** offline)
+                    offline += 1
+                    self._say(f"    network ({type(e).__name__}) — retry in {wait}s")
+                    time.sleep(wait)
             # Every host said 429 in this round: the window is genuinely shut.
             # It reopens on Apple's clock, not ours, and measured here that is
             # minutes rather than seconds — so wait in minutes and stop
@@ -262,6 +269,9 @@ def main():
         n = write_csv(todo, done, os.path.join(args.work, "tracks.csv"))
         print(f"  {n} found tracks written to {args.work}/tracks.csv")
         return
+
+    # Hours of searching: without this a laptop sleeps through most of it.
+    keep_awake()
 
     api = Search(load_tokens(), pause=args.pause)
 

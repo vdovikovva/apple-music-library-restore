@@ -164,10 +164,14 @@ class Client:
             return {}, []
         try:
             p = self.get(f"/v1/catalog/{storefront}/{kind}",
-                         {param: ",".join(values)})
+                         {param: ",".join(values)}, strict=True)
             items = p.get("data", [])
             return {d["id"]: d for d in items}, items
-        except ApiError:
+        except ApiError as e:
+            # Offline is not a bad ID: splitting would only multiply the
+            # retries, and an empty answer would read as 'not in catalog'.
+            if e.status == 0:
+                raise
             if len(values) == 1:
                 return {}, []
             mid = len(values) // 2

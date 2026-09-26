@@ -21,9 +21,9 @@ import json
 import os
 import time
 
-from common import (ACCEPTED, Client, base_parser, duration_delta,
-                    live_library_ids, load_library_tracks, load_tokens,
-                    require_export, verdict, work_dir)
+from common import (ACCEPTED, ApiError, Client, base_parser, duration_delta,
+                    keep_awake, live_library_ids, load_library_tracks,
+                    load_tokens, require_export, verdict, work_dir)
 
 BATCH = 100
 CHECKPOINT_EVERY = 200
@@ -105,7 +105,8 @@ def stage_equivalents(client, args, tracks, resolved, state, ckpt):
     hits = 0
     for n, t in enumerate(todo, 1):
         data = client.get(f"/v1/catalog/{args.dst}/songs",
-                          {"filter[equivalents]": t["src_id"]}).get("data", [])
+                          {"filter[equivalents]": t["src_id"]},
+                          strict=True).get("data", [])
         if data:
             resolved[t["src_id"]] = record(t, data[0], "equivalents")
             hits += 1
@@ -142,7 +143,8 @@ def stage_albums(client, args, albums_out, state, ckpt):
     rest = [a for a in albums if a["src_id"] not in albums_out]
     for n, a in enumerate(rest, 1):
         data = client.get(f"/v1/catalog/{args.dst}/albums",
-                          {"filter[equivalents]": a["src_id"]}).get("data", [])
+                          {"filter[equivalents]": a["src_id"]},
+                          strict=True).get("data", [])
         if data:
             albums_out[a["src_id"]] = {
                 "method": "equivalents", "dst_id": data[0]["id"],
@@ -153,6 +155,32 @@ def stage_albums(client, args, albums_out, state, ckpt):
             state["albums"] = albums_out
             save(state, ckpt)
     print(f"    -> {len(albums_out)}/{len(albums)} resolved")
+
+
+def resolve_all(client, args, tracks, resolved, albums_out, state, ckpt):
+    """All network work of this step. Returns catalog IDs already in the library."""
+    existing, dead = live_library_ids(client)
+    print(f"  Already in library:      {len(existing)} live, {dead} dead entries ignored")
+
+    # Order matters and costs about a minute of extra requests.
+    #
+    # ISRC runs first even though it needs two batched passes (source catalog
+    # -> ISRC, then ISRC -> target) while a direct lookup needs one. Measured
+    # on this library: ISRC was duration-exact on 100% of its matches, direct
+    # lookups on 96%. Where the two disagreed, ISRC was right 7 times out of 7.
+    # Running direct first would lock in ~190 wrong versions that ISRC would
+    # have resolved correctly. Accuracy wins over ~60 seconds.
+    for fn in (stage_isrc, stage_direct):
+        fn(client, args, tracks, resolved)
+        state["resolved"] = resolved
+        save(state, ckpt)
+    stage_equivalents(client, args, tracks, resolved, state, ckpt)
+    state["resolved"] = resolved
+    save(state, ckpt)
+    stage_albums(client, args, albums_out, state, ckpt)
+    state["albums"] = albums_out
+    save(state, ckpt)
+    return existing
 
 
 def main():
@@ -180,28 +208,19 @@ def main():
     print(f"    with a catalog ID:     {len(tracks)}")
     print(f"    personal uploads:      {len(untagged)}  (not recoverable)")
 
-    existing, dead = live_library_ids(client)
-    print(f"  Already in library:      {len(existing)} live, {dead} dead entries ignored")
-
+    keep_awake()
     t0 = time.time()
-    # Order matters and costs about a minute of extra requests.
-    #
-    # ISRC runs first even though it needs two batched passes (source catalog
-    # -> ISRC, then ISRC -> target) while a direct lookup needs one. Measured
-    # on this library: ISRC was duration-exact on 100% of its matches, direct
-    # lookups on 96%. Where the two disagreed, ISRC was right 7 times out of 7.
-    # Running direct first would lock in ~190 wrong versions that ISRC would
-    # have resolved correctly. Accuracy wins over ~60 seconds.
-    for fn in (stage_isrc, stage_direct):
-        fn(client, args, tracks, resolved)
-        state["resolved"] = resolved
+    try:
+        existing = resolve_all(client, args, tracks, resolved, albums_out, state, ckpt)
+    except ApiError as e:
+        if e.status != 0:
+            raise
+        # Network gone for good. Every hit so far is in the checkpoint; the
+        # misses are not recorded anywhere, so a re-run simply asks again.
+        state["resolved"], state["albums"] = resolved, albums_out
         save(state, ckpt)
-    stage_equivalents(client, args, tracks, resolved, state, ckpt)
-    state["resolved"] = resolved
-    save(state, ckpt)
-    stage_albums(client, args, albums_out, state, ckpt)
-    state["albums"] = albums_out
-    save(state, ckpt)
+        raise SystemExit(f"\n  Network down ({e}). Progress is saved — run the "
+                         "same command again to resume.")
 
     # ── reports ──
     out_all = os.path.join(work, "tracks.csv")
