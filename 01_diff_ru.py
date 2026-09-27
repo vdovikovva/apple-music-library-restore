@@ -29,7 +29,7 @@ import json
 import os
 import sys
 
-from common import Client, load_tokens, norm, similar
+from common import ApiError, Client, load_tokens, norm, similar
 
 
 def fetch_ru_library(client, path):
@@ -122,9 +122,17 @@ def main():
     print("=" * 66)
 
     client = Client(load_tokens(), pause=args.pause)
-    print(f"\nStorefront: {client.storefront()}")
-    print("\nNew library...")
-    new = fetch_ru_library(client, os.path.join(args.work, "ru-library.json"))
+    try:
+        print(f"\nStorefront: {client.storefront()}")
+        print("\nNew library...")
+        new = fetch_ru_library(client, os.path.join(args.work, "ru-library.json"))
+    except ApiError as e:
+        if e.status != 0:
+            raise
+        # The cache is written only after a full read, so a half-fetched
+        # library never lands on disk to be mistaken for the whole one.
+        sys.exit(f"\n  ✗ Network down ({e}). Nothing was cached — "
+                 "re-run once it is back.")
 
     by_pair, by_title, by_sec = index(new)
 
