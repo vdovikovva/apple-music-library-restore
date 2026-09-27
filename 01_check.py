@@ -12,7 +12,7 @@ two minutes and tells you whether the rest is worth doing.
 import random
 import sys
 
-from common import (ACCEPTED, Client, base_parser, duration_delta,
+from common import (ACCEPTED, ApiError, Client, base_parser, duration_delta,
                     load_library_tracks, load_tokens, require_export, verdict)
 
 SAMPLE = 100
@@ -27,7 +27,18 @@ def main():
     require_export(args)
 
     client = Client(load_tokens(), pause=args.pause)
+    try:
+        check(args, client)
+    except ApiError as e:
+        if e.status != 0:
+            raise
+        # Offline used to come back as empty pages: 'tokens rejected' on the
+        # first request, or a recovery estimate that was simply too low.
+        sys.exit(f"\n  ✗ Network down ({e}). Nothing to estimate — "
+                 "re-run once it is back.")
 
+
+def check(args, client):
     print("=" * 66)
     print("STEP 1 — CHECK  (read-only)")
     print("=" * 66)
@@ -77,7 +88,8 @@ def main():
     if missing:
         for t in missing[:EQUIV_SAMPLE]:
             data = client.get(f"/v1/catalog/{args.dst}/songs",
-                              {"filter[equivalents]": t["src_id"]}).get("data", [])
+                              {"filter[equivalents]": t["src_id"]},
+                              strict=True).get("data", [])
             if data:
                 resolved.append((t, data[0],
                                  duration_delta(t, data[0]["attributes"])))
@@ -101,14 +113,14 @@ def main():
     subset = missing[:EQUIV_SAMPLE]
     for t in subset:
         src = client.get(f"/v1/catalog/{args.src}/songs",
-                         {"ids": t["src_id"]}).get("data", [])
+                         {"ids": t["src_id"]}, strict=True).get("data", [])
         if not src:
             continue
         isrc = src[0]["attributes"].get("isrc")
         if not isrc:
             continue
         if client.get(f"/v1/catalog/{args.dst}/songs",
-                      {"filter[isrc]": isrc}).get("data", []):
+                      {"filter[isrc]": isrc}, strict=True).get("data", []):
             isrc_hits += 1
     print(f"    found via ISRC:     {isrc_hits}/{len(subset)}")
 

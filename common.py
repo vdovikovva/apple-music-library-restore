@@ -138,7 +138,7 @@ class Client:
     # ── convenience wrappers ──
 
     def storefront(self):
-        d = self.get("/v1/me/storefront").get("data", [])
+        d = self.get("/v1/me/storefront", strict=True).get("data", [])
         return d[0]["id"] if d else None
 
     def library_songs(self, limit_pages=400):
