@@ -22,22 +22,35 @@ on the new one.
 
 Usage:
     python3 01_diff_ru.py --snapshot work/us-export
+    python3 01_diff_ru.py --snapshot work/us-export --refresh   # after step 3
 """
 
 import argparse
 import json
 import os
 import sys
+import time
 
 from common import ApiError, Client, load_tokens, norm, similar
 
 
-def fetch_ru_library(client, path):
-    """Whole library of the current account, cached on disk after first run."""
-    if os.path.exists(path):
+def fetch_ru_library(client, path, refresh=False):
+    """
+    Whole library of the current account, cached on disk after first run.
+
+    The cache never expires by itself, and the library it describes grows with
+    every step 3 run. Diffing against an old copy puts tracks that were added
+    since back into the delta, and step 2 then spends its scarce search budget
+    finding them again. Hence the age on every cached read, and --refresh.
+    """
+    if os.path.exists(path) and not refresh:
         with open(path, encoding="utf-8") as f:
             songs = json.load(f)
-        print(f"  cached: {len(songs)} tracks from {path}")
+        age = (time.time() - os.path.getmtime(path)) / 86400
+        when = time.strftime("%Y-%m-%d", time.localtime(os.path.getmtime(path)))
+        print(f"  cached: {len(songs)} tracks from {path}, taken {when} "
+              f"({age:.0f} days ago)")
+        print("  added tracks since then? re-run with --refresh")
         return songs
 
     songs, dead = [], 0
@@ -109,6 +122,8 @@ def main():
                    help="folder written by 00_dump_local.py")
     p.add_argument("--work", default="work", help="folder for intermediate files")
     p.add_argument("--pause", type=float, default=0.35)
+    p.add_argument("--refresh", action="store_true",
+                   help="re-read the new account's library instead of the cache")
     args = p.parse_args()
 
     tpath = os.path.join(args.snapshot, "Apple Music Library Tracks.json")
@@ -125,7 +140,8 @@ def main():
     try:
         print(f"\nStorefront: {client.storefront()}")
         print("\nNew library...")
-        new = fetch_ru_library(client, os.path.join(args.work, "ru-library.json"))
+        new = fetch_ru_library(client, os.path.join(args.work, "ru-library.json"),
+                               refresh=args.refresh)
     except ApiError as e:
         if e.status != 0:
             raise

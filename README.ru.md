@@ -201,6 +201,8 @@ python3 03_add_tracks.py --include-manual work/manual_review.csv --apply
 python3 00_dump_local.py --out work/local-export
 
 # 1. Сверка с медиатекой нового аккаунта -> work/delta.json (только чтение)
+#    Медиатека кэшируется в work/ru-library.json; при повторном запуске после
+#    третьего шага добавьте --refresh, иначе залитое вернётся как недостающее
 python3 01_diff_ru.py --snapshot work/local-export
 
 # 2. Поиск недостающего в целевом каталоге -> work/tracks.csv

@@ -202,6 +202,8 @@ while the library is still there.
 python3 00_dump_local.py --out work/local-export
 
 # 1. Diff it against the new account's library -> work/delta.json (read-only)
+#    The new library is cached in work/ru-library.json; add --refresh on any
+#    re-run after step 3, or tracks added since come back as missing
 python3 01_diff_ru.py --snapshot work/local-export
 
 # 2. Search the target catalog for what is missing -> work/tracks.csv
